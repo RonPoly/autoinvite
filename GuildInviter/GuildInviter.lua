@@ -143,7 +143,8 @@ function GI:DoSearch(isManualOverride)
     end
 
     self:UpdateStatusText("SCANNING", self.currentScanLevel)
-    SetWhoToUI(true)
+    -- Display /who results directly in the chat rather than the UI
+    SetWhoToUI(false)
     SendWho("g-\"\" " .. self.currentScanLevel)
     self.currentScanLevel = self.currentScanLevel + 1
 end
