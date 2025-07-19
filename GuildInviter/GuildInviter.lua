@@ -1,8 +1,9 @@
--- GuildInviter v2.5 - Manual Override Fix
+-- GuildInviter v2.5 - Manual Override Fix & Class Filter
 local GI = LibStub("AceAddon-3.0"):NewAddon("GuildInviter", "AceConsole-3.0", "AceEvent-3.0", "AceTimer-3.0")
 local ADB  = LibStub("AceDB-3.0")
 local ACD  = LibStub("AceConfig-3.0")
 local ACDD = LibStub("AceConfigDialog-3.0")
+local LBC = LibStub("LibBabble-Class-3.0"):GetLookupTable()
 
 -- Default profile
 local defaults = {
@@ -19,6 +20,18 @@ local defaults = {
     whisperMessage   = "Welcome to the guild! We're happy to have you join us.",
     sessionAccepted  = 0,
     queueThreshold   = 10,
+    classes          = {
+      WARRIOR = true,
+      PALADIN = true,
+      HUNTER = true,
+      ROGUE = true,
+      PRIEST = true,
+      DEATHKNIGHT = true,
+      SHAMAN = true,
+      MAGE = true,
+      WARLOCK = true,
+      DRUID = true
+    }
   },
 }
 
@@ -55,6 +68,32 @@ local options = {
         queueThreshold = { type = "range", name = "Queue Threshold", desc = "The scan will pause when the invite queue reaches this number.", order = 11, min = 1, max = 50, step = 1,
           get = function() return GI.db.profile.queueThreshold end,
           set = function(_,v) GI.db.profile.queueThreshold = v end },
+      },
+    },
+    classes = {
+      type = "group",
+      name = "Classes",
+      order = 2,
+      args = {
+        class_filter = {
+          type = "multiselect",
+          name = "Recruiting Classes",
+          order = 1,
+          values = {
+            WARRIOR = LBC["Warrior"],
+            PALADIN = LBC["Paladin"],
+            HUNTER = LBC["Hunter"],
+            ROGUE = LBC["Rogue"],
+            PRIEST = LBC["Priest"],
+            DEATHKNIGHT = LBC["Death Knight"],
+            SHAMAN = LBC["Shaman"],
+            MAGE = LBC["Mage"],
+            WARLOCK = LBC["Warlock"],
+            DRUID = LBC["Druid"]
+          },
+          get = function(info, key) return GI.db.profile.classes[key] end,
+          set = function(info, key, value) GI.db.profile.classes[key] = value end,
+        },
       },
     },
     whisper = { type = "group", name = "Whisper Settings", order = 3, args = {
@@ -129,7 +168,7 @@ function GI:DoSearch(isManualOverride)
             self:UpdateStatusText("PAUSED")
             self.isPaused = true
         end
-        return 
+        return
     end
 
     if self.isPaused then
@@ -138,13 +177,25 @@ function GI:DoSearch(isManualOverride)
 
     if self.currentScanLevel > self.db.profile.levelMax then
         self:UpdateStatusText("RESTARTING")
-        self.currentScanLevel = self.db.profile.levelMin 
+        self.currentScanLevel = self.db.profile.levelMin
         return
     end
 
     self:UpdateStatusText("SCANNING", self.currentScanLevel)
-    SetWhoToUI(true)
-    SendWho("g-\"\" " .. self.currentScanLevel)
+    
+    local classQuery = ""
+    local classes = {}
+    for class, enabled in pairs(self.db.profile.classes) do
+        if enabled then
+            table.insert(classes, 'c-"' .. LBC[class] .. '"')
+        end
+    end
+    if #classes > 0 then
+        classQuery = table.concat(classes, " ")
+    end
+
+    SetWhoToUI(false)
+    SendWho(string.format('g-"" %s %d', classQuery, self.currentScanLevel))
     self.currentScanLevel = self.currentScanLevel + 1
 end
 
@@ -162,7 +213,7 @@ function GI:WHO_LIST_UPDATE()
     local numResults = GetNumWhoResults()
     for i = 1, numResults do
         local name, guild = GetWhoInfo(i)
-        
+
         if guild == "" and not self.db.profile.blacklist[name] then
             local alreadyInQueue = false
             for _, queuedName in ipairs(self.db.profile.queue) do
@@ -181,13 +232,13 @@ end
 
 function GI:CHAT_MSG_SYSTEM(event, msg)
   if not msg then return end
-  
+
   if (msg:find("muted") or msg:find("restricted") or msg:find("too many messages")) then
     print("|cffff0000GuildInviter: Chat restriction detected!|r")
     print("|cffff0000The addon has been automatically stopped for safety.|r")
     self:Stop()
   end
-  
+
   if msg:find("has joined the guild") then
     self.db.profile.sessionAccepted = self.db.profile.sessionAccepted + 1
   end
@@ -195,7 +246,7 @@ end
 
 function GI:ProcessInviteQueue()
     if #self.db.profile.queue == 0 then return end
-    
+
     local name = table.remove(self.db.profile.queue, 1)
     if name then
         self:InvitePerson(name)
@@ -229,13 +280,13 @@ function GI:CreateMainFrame()
   f:SetNormalTexture("Interface\\Buttons\\WHITE8X8");
   local tex = f:GetNormalTexture(); tex:SetVertexColor(0.1, 0.1, 0.1, 0.8)
   f:SetBackdrop({edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14}); f:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
-  
+
   self.label = f:CreateFontString(nil, "OVERLAY", "GameFontNormal");
   self.label:SetPoint("TOP", f, "TOP", 0, -8);
-  
+
   self.statusLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall");
   self.statusLabel:SetPoint("BOTTOM", f, "BOTTOM", 0, 8)
-  
+
   self:UpdateFrameLabel()
 
   f:SetScript("OnClick", function(self, button)
@@ -246,7 +297,7 @@ function GI:CreateMainFrame()
         InterfaceOptionsFrame_OpenToCategory(GI.optionsFrame)
     end
   end)
-  
+
   f:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     GameTooltip:SetText("Guild Inviter")
@@ -311,3 +362,4 @@ function GI:PrintStatus()
     print(string.format("  Invite Queue: |cffffcc00%d|r", #self.db.profile.queue))
     print(string.format("  Session Accepted: |cffffcc00%d|r", self.db.profile.sessionAccepted))
 end
+
